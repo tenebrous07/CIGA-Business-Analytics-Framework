@@ -1,0 +1,943 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>CIGA — Customer Intent Gap Analyzer</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#0d1117;--surface:#161b22;--surface2:#1e2631;--surface3:#252d3a;
+  --border:#30363d;--accent:#4f8ef7;--accent2:#58d68d;--accent3:#f39c12;
+  --accent4:#e74c3c;--accent5:#9b59b6;--text:#e6edf3;--muted:#8b949e;
+  --sidebar:240px;--header:60px;
+}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);
+     display:flex;min-height:100vh;overflow-x:hidden}
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:var(--surface)}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+
+/*── Sidebar ──────────────────────────────────────────────────────────────────*/
+.sidebar{width:var(--sidebar);min-height:100vh;background:var(--surface);
+         border-right:1px solid var(--border);display:flex;flex-direction:column;
+         position:fixed;top:0;left:0;z-index:100}
+.sidebar-logo{padding:18px 16px;border-bottom:1px solid var(--border);
+              display:flex;align-items:center;gap:10px}
+.logo-icon{width:36px;height:36px;background:linear-gradient(135deg,var(--accent),var(--accent5));
+           border-radius:10px;display:flex;align-items:center;justify-content:center;
+           font-weight:900;font-size:13px;color:#fff;flex-shrink:0}
+.logo-text{font-size:17px;font-weight:800;letter-spacing:.5px}
+.logo-sub{font-size:10px;color:var(--muted);letter-spacing:.3px}
+.nav-section{padding:12px 8px 4px;font-size:10px;color:var(--muted);
+             text-transform:uppercase;letter-spacing:1px;font-weight:600}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 16px;
+          border-radius:8px;margin:2px 8px;cursor:pointer;font-size:13px;
+          transition:.15s;color:var(--muted)}
+.nav-item:hover{background:var(--surface2);color:var(--text)}
+.nav-item.active{background:rgba(79,142,247,.15);color:var(--accent);font-weight:600}
+.nav-item i{width:18px;text-align:center;font-size:13px}
+.nav-badge{margin-left:auto;background:var(--accent4);color:#fff;
+           font-size:10px;padding:1px 7px;border-radius:10px;font-weight:700}
+.sidebar-footer{margin-top:auto;padding:14px;border-top:1px solid var(--border);
+                font-size:11px;color:var(--muted);line-height:1.6}
+
+/*── Main ─────────────────────────────────────────────────────────────────────*/
+.main{margin-left:var(--sidebar);flex:1;display:flex;flex-direction:column;min-height:100vh}
+.topbar{height:var(--header);background:var(--surface);border-bottom:1px solid var(--border);
+        display:flex;align-items:center;justify-content:space-between;
+        padding:0 24px;position:sticky;top:0;z-index:90}
+.page-title{font-size:15px;font-weight:700}
+.page-sub{font-size:11px;color:var(--muted)}
+.topbar-right{display:flex;align-items:center;gap:10px}
+.status-pill{display:flex;align-items:center;gap:6px;background:var(--surface2);
+             padding:5px 12px;border-radius:20px;font-size:12px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--accent2);
+     animation:pulse 2s infinite}
+.dot.demo{background:var(--accent3)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.btn{padding:7px 14px;border-radius:8px;font-size:12px;font-weight:600;
+     cursor:pointer;border:1px solid var(--border);background:var(--surface2);
+     color:var(--text);transition:.15s;display:inline-flex;align-items:center;gap:6px}
+.btn:hover{background:var(--surface3)}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn-primary:hover{background:#3d7ae8}
+
+/*── Demo banner ──────────────────────────────────────────────────────────────*/
+#demo-banner{display:none;background:rgba(243,156,18,.12);
+             border-bottom:1px solid rgba(243,156,18,.3);
+             padding:8px 24px;font-size:12px;color:var(--accent3);
+             align-items:center;gap:10px}
+#demo-banner code{background:var(--surface2);padding:1px 6px;border-radius:4px;
+                  font-family:monospace;color:var(--accent2)}
+#demo-banner a{color:var(--accent);text-decoration:underline}
+
+/*── Loading overlay ──────────────────────────────────────────────────────────*/
+#loading-overlay{position:fixed;inset:0;background:rgba(13,17,23,.96);
+                 z-index:999;display:flex;flex-direction:column;
+                 align-items:center;justify-content:center;gap:18px}
+.loader-ring{width:52px;height:52px;border:4px solid var(--border);
+             border-top-color:var(--accent);border-radius:50%;
+             animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loader-text{font-size:15px;font-weight:600}
+.loader-sub{font-size:12px;color:var(--muted)}
+
+/*── Content ──────────────────────────────────────────────────────────────────*/
+.content{flex:1;padding:22px;overflow-y:auto}
+.page{display:none}.page.active{display:block}
+
+/*── KPI cards ────────────────────────────────────────────────────────────────*/
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;margin-bottom:22px}
+.kpi-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;
+          padding:16px 18px;position:relative;overflow:hidden;transition:.2s}
+.kpi-card:hover{border-color:var(--accent);transform:translateY(-2px)}
+.kpi-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;
+                  background:linear-gradient(90deg,var(--c1),var(--c2))}
+.kpi-card.blue{--c1:#4f8ef7;--c2:#9b59b6}
+.kpi-card.green{--c1:#58d68d;--c2:#1abc9c}
+.kpi-card.orange{--c1:#f39c12;--c2:#e67e22}
+.kpi-card.red{--c1:#e74c3c;--c2:#c0392b}
+.kpi-card.purple{--c1:#9b59b6;--c2:#8e44ad}
+.kpi-card.teal{--c1:#1abc9c;--c2:#16a085}
+.kpi-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;font-weight:600}
+.kpi-value{font-size:26px;font-weight:800;margin:5px 0;line-height:1}
+.kpi-sub{font-size:11px;color:var(--muted)}
+.kpi-icon{position:absolute;right:14px;top:50%;transform:translateY(-50%);font-size:30px;opacity:.1}
+
+/*── Charts ───────────────────────────────────────────────────────────────────*/
+.chart-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(400px,1fr));gap:14px;margin-bottom:22px}
+.chart-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px}
+.chart-card.full{grid-column:1/-1}
+.chart-title{font-size:11px;font-weight:700;margin-bottom:14px;color:var(--muted);
+             text-transform:uppercase;letter-spacing:.6px}
+.chart-wrap canvas{max-height:260px}
+
+/*── Section header ───────────────────────────────────────────────────────────*/
+.section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.section-title{font-size:14px;font-weight:700;display:flex;align-items:center;gap:8px}
+.section-title i{color:var(--accent)}
+
+/*── Tables ───────────────────────────────────────────────────────────────────*/
+.table-wrap{overflow-x:auto;border-radius:10px;border:1px solid var(--border);margin-bottom:22px}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+thead tr{background:var(--surface2)}
+th{padding:9px 13px;text-align:left;font-size:10px;color:var(--muted);
+   text-transform:uppercase;letter-spacing:.7px;font-weight:600;white-space:nowrap}
+td{padding:9px 13px;border-top:1px solid var(--border);vertical-align:middle}
+tr:hover td{background:rgba(255,255,255,.02)}
+.badge{display:inline-flex;align-items:center;padding:2px 9px;
+       border-radius:20px;font-size:10px;font-weight:700;white-space:nowrap}
+.badge-critical{background:rgba(231,76,60,.2);color:#e74c3c}
+.badge-high{background:rgba(243,156,18,.2);color:#f39c12}
+.badge-medium{background:rgba(88,214,141,.2);color:#58d68d}
+.badge-low{background:rgba(79,142,247,.2);color:#4f8ef7}
+.badge-seg{background:rgba(155,89,182,.2);color:#9b59b6}
+
+/*── Funnel bars ──────────────────────────────────────────────────────────────*/
+.funnel-stage{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+.funnel-label{width:180px;font-size:12px;color:var(--muted);text-align:right;flex-shrink:0}
+.funnel-bar-wrap{flex:1;height:34px;background:var(--surface2);border-radius:7px;overflow:hidden}
+.funnel-bar{height:100%;border-radius:7px;display:flex;align-items:center;
+            padding-left:12px;font-weight:700;font-size:12px;color:#fff;
+            transition:width 1.2s cubic-bezier(.25,.8,.25,1);min-width:60px}
+.funnel-drop{width:80px;font-size:11px;color:var(--accent4);text-align:right;flex-shrink:0}
+
+/*── Tab bar ──────────────────────────────────────────────────────────────────*/
+.tab-bar{display:flex;gap:4px;background:var(--surface);border:1px solid var(--border);
+         border-radius:10px;padding:4px;margin-bottom:18px;width:fit-content;flex-wrap:wrap}
+.tab-btn{padding:6px 15px;border-radius:7px;font-size:12px;font-weight:600;
+         cursor:pointer;border:none;background:transparent;color:var(--muted);transition:.15s}
+.tab-btn.active{background:var(--accent);color:#fff}
+.tab-btn:hover:not(.active){background:var(--surface2);color:var(--text)}
+.tab-pane{display:none}.tab-pane.active{display:block}
+
+/*── Alert cards ──────────────────────────────────────────────────────────────*/
+.alert-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px}
+.alert-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;
+            padding:14px;position:relative;overflow:hidden;transition:.2s}
+.alert-card:hover{transform:translateY(-2px)}
+.alert-card::before{content:'';position:absolute;left:0;top:0;bottom:0;
+                    width:4px;border-radius:2px 0 0 2px}
+.alert-card.CRITICAL::before{background:var(--accent4)}
+.alert-card.HIGH::before{background:var(--accent3)}
+.alert-card.MEDIUM::before{background:var(--accent)}
+.alert-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px}
+.alert-value{font-size:20px;font-weight:800;color:var(--accent2)}
+.alert-rec{background:var(--surface2);border-radius:7px;padding:9px 11px;
+           font-size:11px;color:var(--muted);margin-top:9px;line-height:1.5}
+
+/*── Failure cards ────────────────────────────────────────────────────────────*/
+.failure-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;margin-bottom:22px}
+.failure-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px;transition:.2s}
+.failure-card:hover{border-color:var(--accent);transform:translateY(-2px)}
+.failure-icon{font-size:28px;margin-bottom:8px}
+.failure-title{font-size:13px;font-weight:700;margin-bottom:5px}
+.failure-desc{font-size:11px;color:var(--muted);line-height:1.5;margin-bottom:10px}
+.failure-affected{font-size:22px;font-weight:800;color:var(--accent3)}
+.failure-action{background:rgba(79,142,247,.1);border:1px solid rgba(79,142,247,.2);
+                border-radius:7px;padding:7px 10px;font-size:11px;color:var(--accent);
+                margin-top:10px;line-height:1.4}
+
+/*── Info box ─────────────────────────────────────────────────────────────────*/
+.info-box{background:rgba(79,142,247,.07);border:1px solid rgba(79,142,247,.2);
+          border-radius:10px;padding:12px 16px;font-size:12.5px;color:var(--muted);
+          line-height:1.6;margin-bottom:18px}
+.info-box strong{color:var(--accent)}
+
+/*── Mini bar in table ────────────────────────────────────────────────────────*/
+.mini-bar{display:inline-block;height:9px;
+          background:linear-gradient(90deg,var(--accent),var(--accent5));
+          border-radius:5px;vertical-align:middle;margin-right:7px}
+
+/*── Report section ───────────────────────────────────────────────────────────*/
+.report-section{background:var(--surface);border:1px solid var(--border);
+                border-radius:12px;padding:20px;margin-bottom:14px}
+.report-section h3{font-size:14px;font-weight:700;margin-bottom:12px;
+                    color:var(--accent);display:flex;align-items:center;gap:8px}
+</style>
+</head>
+<body>
+
+<!-- Loading overlay -->
+<div id="loading-overlay">
+  <div class="loader-ring"></div>
+  <div class="loader-text">CIGA — Analysing customer intent…</div>
+  <div class="loader-sub" id="load-sub">Connecting to server</div>
+</div>
+
+<!-- Sidebar -->
+<nav class="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-icon">CI</div>
+    <div>
+      <div class="logo-text">CIGA</div>
+      <div class="logo-sub">Intent Gap Analyzer</div>
+    </div>
+  </div>
+  <div class="nav-section">Analytics</div>
+  <div class="nav-item active" data-page="overview"><i class="fas fa-chart-pie"></i> Overview</div>
+  <div class="nav-item" data-page="funnel"><i class="fas fa-filter"></i> Intent Funnel</div>
+  <div class="nav-item" data-page="leakage"><i class="fas fa-water"></i> Revenue Leakage</div>
+  <div class="nav-item" data-page="highintent"><i class="fas fa-bolt"></i> High-Intent Users<span class="nav-badge" id="badge-hi">—</span></div>
+  <div class="nav-section">Diagnosis</div>
+  <div class="nav-item" data-page="failures"><i class="fas fa-exclamation-triangle"></i> Failure Points</div>
+  <div class="nav-item" data-page="categories"><i class="fas fa-tags"></i> Category Analysis</div>
+  <div class="nav-item" data-page="alerts"><i class="fas fa-bell"></i> Live Alerts<span class="nav-badge" id="badge-alert">0</span></div>
+  <div class="nav-section">Reports</div>
+  <div class="nav-item" data-page="reports"><i class="fas fa-file-alt"></i> Reports</div>
+  <div class="sidebar-footer">
+    <strong>MGT1062</strong> — Big Data Analytics<br>
+    Team: Thejesh · 23MIA1033
+  </div>
+</nav>
+
+<!-- Main -->
+<div class="main">
+  <div class="topbar">
+    <div>
+      <div class="page-title" id="topbar-title">Overview Dashboard</div>
+      <div class="page-sub" id="topbar-sub">Customer Intent Gap Analyzer</div>
+    </div>
+    <div class="topbar-right">
+      <div class="status-pill"><div class="dot" id="status-dot"></div><span id="status-text">Loading…</span></div>
+      <button class="btn" onclick="reloadData()"><i class="fas fa-sync-alt"></i> Refresh</button>
+    </div>
+  </div>
+
+  <!-- Demo mode banner -->
+  <div id="demo-banner">
+    <i class="fas fa-flask"></i>
+    <strong>Demo Mode</strong> — sample data shown. For real analysis run
+    <code>python run.py</code> then open
+    <a href="http://127.0.0.1:8080" target="_blank">http://127.0.0.1:8080</a>
+  </div>
+
+  <div class="content">
+
+    <!-- PAGE: Overview -->
+    <div class="page active" id="page-overview">
+      <div class="info-box"><strong>Customer Intent Gap Analyzer (CIGA)</strong> — finds the gap between what customers <em>intended</em> to do and what they actually completed. Every number below is money hiding in your clickstream.</div>
+      <div class="kpi-grid" id="kpi-row1"></div>
+      <div class="kpi-grid" id="kpi-row2"></div>
+      <div class="chart-grid">
+        <div class="chart-card full"><div class="chart-title">Daily Event Trend — Views / Carts / Purchases</div><div class="chart-wrap"><canvas id="chart-daily"></canvas></div></div>
+        <div class="chart-card"><div class="chart-title">Hourly Activity Pattern</div><div class="chart-wrap"><canvas id="chart-hourly"></canvas></div></div>
+        <div class="chart-card"><div class="chart-title">Event Type Distribution</div><div class="chart-wrap"><canvas id="chart-events-doughnut"></canvas></div></div>
+      </div>
+    </div>
+
+    <!-- PAGE: Intent Funnel -->
+    <div class="page" id="page-funnel">
+      <div class="info-box"><strong>Intent Loss Funnel</strong> — Normal tools say "cart abandoned". CIGA shows <em>which high-intent users specifically failed</em> and at which stage.</div>
+      <div class="tab-bar">
+        <button class="tab-btn active" onclick="switchTab('funnel','standard',this)">Standard Funnel</button>
+        <button class="tab-btn" onclick="switchTab('funnel','intent',this)">Intent-Weighted</button>
+        <button class="tab-btn" onclick="switchTab('funnel','gap',this)">Intent Gap</button>
+      </div>
+      <div class="tab-pane active" id="funnel-pane-standard">
+        <div class="chart-grid">
+          <div class="chart-card"><div class="chart-title">Standard Conversion Funnel</div><div class="chart-wrap"><canvas id="chart-funnel-std"></canvas></div></div>
+          <div class="chart-card"><div class="chart-title">Drop-Off at Each Stage</div><div id="funnel-bars-std" style="padding:8px 0"></div></div>
+        </div>
+      </div>
+      <div class="tab-pane" id="funnel-pane-intent">
+        <div class="chart-grid">
+          <div class="chart-card"><div class="chart-title">Intent-Weighted Funnel (score ≥ 40)</div><div class="chart-wrap"><canvas id="chart-funnel-intent"></canvas></div></div>
+          <div class="chart-card"><div class="chart-title">High-Intent User Drop-Off</div><div id="funnel-bars-intent" style="padding:8px 0"></div></div>
+        </div>
+      </div>
+      <div class="tab-pane" id="funnel-pane-gap">
+        <div class="chart-grid">
+          <div class="chart-card full"><div class="chart-title">Intent Gap — Revenue Opportunity</div><div id="gap-summary"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PAGE: Revenue Leakage -->
+    <div class="page" id="page-leakage">
+      <div class="info-box"><strong>Revenue Leakage</strong> — Every cart that wasn't purchased is a revenue leak. These rows are direct business opportunities.</div>
+      <div class="kpi-grid" id="leakage-kpis"></div>
+      <div class="tab-bar">
+        <button class="tab-btn active" onclick="switchTab('leakage','cat',this)">By Category</button>
+        <button class="tab-btn" onclick="switchTab('leakage','brand',this)">By Brand</button>
+        <button class="tab-btn" onclick="switchTab('leakage','price',this)">By Price Tier</button>
+        <button class="tab-btn" onclick="switchTab('leakage','trend',this)">Daily Trend</button>
+      </div>
+      <div class="tab-pane active" id="leakage-pane-cat">
+        <div class="chart-grid">
+          <div class="chart-card"><div class="chart-title">Revenue Leaked by Category ($)</div><div class="chart-wrap"><canvas id="chart-leak-cat"></canvas></div></div>
+          <div class="chart-card"><div class="chart-title">Abandonment Rate by Category (%)</div><div class="chart-wrap"><canvas id="chart-aband-cat"></canvas></div></div>
+        </div>
+      </div>
+      <div class="tab-pane" id="leakage-pane-brand">
+        <div class="chart-grid">
+          <div class="chart-card full"><div class="chart-title">Revenue Leaked by Brand (Top 10)</div><div class="chart-wrap"><canvas id="chart-leak-brand"></canvas></div></div>
+        </div>
+      </div>
+      <div class="tab-pane" id="leakage-pane-price">
+        <div class="chart-grid">
+          <div class="chart-card"><div class="chart-title">Abandoned Carts by Price Tier</div><div class="chart-wrap"><canvas id="chart-leak-price"></canvas></div></div>
+          <div class="chart-card"><div class="chart-title">Revenue at Risk by Price Tier ($)</div><div class="chart-wrap"><canvas id="chart-leak-price2"></canvas></div></div>
+        </div>
+      </div>
+      <div class="tab-pane" id="leakage-pane-trend">
+        <div class="chart-card full"><div class="chart-title">Daily Revenue Leakage Trend ($)</div><div class="chart-wrap"><canvas id="chart-leak-daily"></canvas></div></div>
+      </div>
+    </div>
+
+    <!-- PAGE: High-Intent Users -->
+    <div class="page" id="page-highintent">
+      <div class="info-box"><strong>High-Intent Non-Converting Users</strong> — These users showed strong purchase signals (score ≥ 40) but never bought. Your highest-ROI retargeting audience.</div>
+      <div class="kpi-grid" id="hi-kpis"></div>
+      <div class="chart-grid">
+        <div class="chart-card"><div class="chart-title">User Segments (Non-Converters)</div><div class="chart-wrap"><canvas id="chart-segments"></canvas></div></div>
+        <div class="chart-card"><div class="chart-title">Intent Score Distribution</div><div class="chart-wrap"><canvas id="chart-score-dist"></canvas></div></div>
+      </div>
+      <div class="section-header"><div class="section-title"><i class="fas fa-users"></i> Top High-Intent Users</div></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>#</th><th>User ID</th><th>Intent Score</th><th>Views</th><th>Cart Adds</th><th>Sessions</th><th>Cart Value</th><th>Segment</th></tr></thead>
+          <tbody id="table-hi-users"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- PAGE: Failure Points -->
+    <div class="page" id="page-failures">
+      <div class="info-box"><strong>Failure Point Diagnosis</strong> — CIGA classifies <em>why</em> intent breaks, not just where. Each card is a diagnosis + recommended intervention.</div>
+      <div class="failure-grid" id="failure-cards"></div>
+      <div class="chart-grid">
+        <div class="chart-card"><div class="chart-title">Abandonment Rate by Category (%)</div><div class="chart-wrap"><canvas id="chart-aband-rate"></canvas></div></div>
+        <div class="chart-card"><div class="chart-title">Conversion Rate by Price Tier (%)</div><div class="chart-wrap"><canvas id="chart-price-conv"></canvas></div></div>
+        <div class="chart-card full"><div class="chart-title">Revenue at Risk by Category ($)</div><div class="chart-wrap"><canvas id="chart-risk-cat"></canvas></div></div>
+      </div>
+    </div>
+
+    <!-- PAGE: Category Analysis -->
+    <div class="page" id="page-categories">
+      <div class="info-box"><strong>Category Deep Dive</strong> — Conversion and revenue metrics broken down by product category to identify high-value vs. high-friction segments.</div>
+      <div class="chart-grid">
+        <div class="chart-card full"><div class="chart-title">Views vs Purchases by Category</div><div class="chart-wrap"><canvas id="chart-cat-bar"></canvas></div></div>
+        <div class="chart-card"><div class="chart-title">Conversion Rate — Radar (top 8)</div><div class="chart-wrap"><canvas id="chart-cat-conv"></canvas></div></div>
+        <div class="chart-card"><div class="chart-title">Revenue by Category ($)</div><div class="chart-wrap"><canvas id="chart-cat-rev"></canvas></div></div>
+      </div>
+      <div class="section-header"><div class="section-title"><i class="fas fa-table"></i> Full Category Metrics</div></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Category</th><th>Views</th><th>Cart Rate</th><th>Conv. Rate</th><th>Cart→Buy</th><th>Revenue</th><th>Users</th></tr></thead>
+          <tbody id="table-cats"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- PAGE: Live Alerts -->
+    <div class="page" id="page-alerts">
+      <div class="info-box"><strong>Real-Time Intent Alerts</strong> — Sessions with high cart value that haven't purchased. In production these trigger automated recovery workflows.</div>
+      <div class="kpi-grid" id="alert-kpis"></div>
+      <div class="section-header">
+        <div class="section-title"><i class="fas fa-bell"></i> At-Risk Sessions</div>
+        <button class="btn" onclick="reloadAlerts()"><i class="fas fa-sync-alt"></i> Refresh</button>
+      </div>
+      <div class="alert-grid" id="alert-cards"></div>
+    </div>
+
+    <!-- PAGE: Reports -->
+    <div class="page" id="page-reports">
+      <div class="report-section">
+        <h3><i class="fas fa-graduation-cap"></i> Project Overview</h3>
+        <p style="color:var(--muted);font-size:13px;line-height:1.8">
+          <strong style="color:var(--text)">Course:</strong> Big Data Computing for Business Analytics (MGT1062)<br>
+          <strong style="color:var(--text)">Team:</strong> Thejesh — 23MIA1033<br>
+          <strong style="color:var(--text)">System:</strong> Customer Intent Gap Analyzer (CIGA)<br>
+          <strong style="color:var(--text)">Dataset:</strong> Multi-Category E-Commerce Behaviour Data (Kaggle)<br>
+          <strong style="color:var(--text)">Source:</strong> mkechinov/ecommerce-behavior-data-from-multi-category-store
+        </p>
+      </div>
+      <div class="report-section">
+        <h3><i class="fas fa-cogs"></i> Architecture</h3>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px">
+          <div style="background:var(--surface2);border-radius:10px;padding:14px"><div style="color:var(--accent);font-weight:700;margin-bottom:6px">📦 data_loader.py</div><div style="color:var(--muted);font-size:11px;line-height:1.6">Kaggle download via kagglehub · Chunked CSV (100K rows/chunk) · Pickle cache · Structured output</div></div>
+          <div style="background:var(--surface2);border-radius:10px;padding:14px"><div style="color:var(--accent2);font-weight:700;margin-bottom:6px">🧠 intent_analyzer.py</div><div style="color:var(--muted);font-size:11px;line-height:1.6">Intent scoring · Session stitching · Failure classification · Revenue leakage quantification</div></div>
+          <div style="background:var(--surface2);border-radius:10px;padding:14px"><div style="color:var(--accent3);font-weight:700;margin-bottom:6px">⚡ app.py</div><div style="color:var(--muted);font-size:11px;line-height:1.6">Flask REST API · 8 endpoints · JSON caching · Bootstrap initialisation on startup</div></div>
+          <div style="background:var(--surface2);border-radius:10px;padding:14px"><div style="color:var(--accent5);font-weight:700;margin-bottom:6px">🌐 index.html</div><div style="color:var(--muted);font-size:11px;line-height:1.6">8-page SPA · Chart.js · Demo mode fallback · Responsive · Real-time alerts</div></div>
+        </div>
+      </div>
+      <div class="report-section">
+        <h3><i class="fas fa-brain"></i> Intent Scoring Formula</h3>
+        <pre style="background:var(--surface2);border-radius:10px;padding:16px;font-size:12px;color:var(--accent2);line-height:2;overflow-x:auto">
+intent_score =  (
+  total_views       × 1   +
+  max_repeat_views  × 3   +
+  cart_adds         × 5   +
+  comparison_count  × 3   +
+  sessions          × 2
+) / max_score × 100         # normalised 0 → 100</pre>
+      </div>
+      <div class="report-section">
+        <h3><i class="fas fa-chart-bar"></i> Live Summary</h3>
+        <div id="report-summary" style="color:var(--muted);font-size:13px;line-height:2"></div>
+      </div>
+    </div>
+
+  </div><!-- /content -->
+</div><!-- /main -->
+
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+//  DEMO DATA  (used when Flask server is unreachable)
+// ─────────────────────────────────────────────────────────────────────────────
+function generateDemoData() {
+  const dates=[], dv=[], dc=[], dp=[];
+  for(let i=0;i<30;i++){
+    const d=new Date(2019,9,1+i);
+    dates.push(d.toISOString().slice(0,10));
+    const base=8000+Math.sin(i/7*Math.PI)*2000+(Math.random()-.5)*800;
+    dv.push(Math.round(Math.max(base,1000)));
+    dc.push(Math.round(Math.max(base*.133,100)));
+    dp.push(Math.round(Math.max(base*.049,30)));
+  }
+  const hours=[...Array(24).keys()];
+  const hv=hours.map(h=>Math.round(12000*Math.exp(-.5*((h-14)/5)**2)+(Math.random()-.5)*600+2000));
+  const hc=hv.map(v=>Math.round(v*.133));
+  const hp=hv.map(v=>Math.round(v*.049));
+  const lt=dates.map((d,i)=>({date:d,revenue_leaked:Math.round((175000+Math.sin(i/5)*45000+(Math.random()-.5)*20000)*100)/100}));
+
+  return {
+    overview:{
+      kpis:{total_events:500000,total_users:52389,total_sessions:118438,total_products:31847,
+            views:398234,cart_adds:52891,purchases:19463,
+            view_to_cart_rate:13.28,cart_to_buy_rate:36.80,overall_conversion:4.89,
+            total_revenue:2847293.50,revenue_leaked:5234891.20,recovery_potential:1465769.54,
+            high_intent_users:8234,high_intent_no_buy:6891},
+      daily_trend:{dates,views:dv,carts:dc,purchases:dp},
+      hourly_pattern:{hours,views:hv,carts:hc,purchases:hp}
+    },
+    funnel:{
+      standard:{stages:['All Views','Cart Adds','Purchases'],values:[398234,52891,19463],drops:[0,86.7,63.2]},
+      intent_weighted:{stages:['High-Intent Viewers','→ Added to Cart','→ Purchased'],values:[8234,5891,1343],drops:[0,28.5,77.2]},
+      intent_gap:{non_converting_high_intent:6891,gap_pct:83.7}
+    },
+    revenue_leakage:{
+      summary:{total_revenue:2847293.50,total_leaked:5234891.20,leakage_rate_pct:64.8,recoverable:1465769.54},
+      by_category:[
+        {category_main:'electronics', abandoned_count:8234,revenue_leaked:1923481,avg_price:233.6,abandonment_rate:73.3},
+        {category_main:'computers',   abandoned_count:5123,revenue_leaked:1203491,avg_price:234.9,abandonment_rate:70.8},
+        {category_main:'appliances',  abandoned_count:3421,revenue_leaked:891234, avg_price:260.5,abandonment_rate:65.4},
+        {category_main:'furniture',   abandoned_count:2134,revenue_leaked:534821, avg_price:250.6,abandonment_rate:72.6},
+        {category_main:'sport',       abandoned_count:1823,revenue_leaked:234891, avg_price:128.8,abandonment_rate:59.0},
+        {category_main:'kids',        abandoned_count:1234,revenue_leaked:189234, avg_price:153.3,abandonment_rate:54.3},
+        {category_main:'apparel',     abandoned_count:983, revenue_leaked:98234,  avg_price:99.9, abandonment_rate:49.8},
+        {category_main:'auto',        abandoned_count:723, revenue_leaked:87234,  avg_price:120.7,abandonment_rate:61.3},
+        {category_main:'construction',abandoned_count:412, revenue_leaked:52891,  avg_price:128.4,abandonment_rate:55.7},
+        {category_main:'stationery',  abandoned_count:234, revenue_leaked:19386,  avg_price:82.8, abandonment_rate:42.1},
+      ],
+      by_brand:[
+        {brand:'samsung',abandoned_count:4823,revenue_leaked:1123491},
+        {brand:'apple',  abandoned_count:3421,revenue_leaked:934821},
+        {brand:'xiaomi', abandoned_count:3123,revenue_leaked:723491},
+        {brand:'lenovo', abandoned_count:2134,revenue_leaked:534821},
+        {brand:'lg',     abandoned_count:1823,revenue_leaked:423491},
+        {brand:'huawei', abandoned_count:1234,revenue_leaked:312341},
+        {brand:'sony',   abandoned_count:983, revenue_leaked:234891},
+        {brand:'dell',   abandoned_count:723, revenue_leaked:189234},
+        {brand:'hp',     abandoned_count:412, revenue_leaked:102341},
+        {brand:'asus',   abandoned_count:234, revenue_leaked:87234},
+      ],
+      by_price_tier:[
+        {price_tier:'< $10',    abandoned_count:2341, revenue_leaked:12341},
+        {price_tier:'$10–50',   abandoned_count:8234, revenue_leaked:234891},
+        {price_tier:'$50–100',  abandoned_count:12341,revenue_leaked:923491},
+        {price_tier:'$100–500', abandoned_count:18234,revenue_leaked:3234891},
+        {price_tier:'> $500',   abandoned_count:2341, revenue_leaked:829277},
+      ],
+      daily_trend:lt
+    },
+    high_intent:{
+      summary:{total_high_intent_no_buy:6891,avg_intent_score:62.4,potential_revenue:1923481,recoverable_revenue:538575},
+      segments:{'Cart Abandoner':3241,'Comparison Shopper':1823,'Window Shopper':1234,'Repeat Visitor':593,'Browser':15234},
+      score_distribution:{
+        labels:['0–10','10–20','20–30','30–40','40–50','50–60','60–70','70–80','80–90','90–100'],
+        values:[8234,12341,9823,7234,5891,3823,2341,1234,712,341]
+      },
+      top_users:Array.from({length:15},(_,i)=>({
+        user_id:`demo_${(0x10000+i*7919).toString(16)}`,
+        intent_score:Math.max(32,Math.round(95-i*3.8)),
+        total_views:Math.max(4,Math.round(48-i*2.8)),
+        cart_adds:Math.max(0,Math.round(9-i*.6)),
+        sessions:Math.max(1,Math.round(7-i*.35)),
+        total_cart_value:Math.round(Math.max(20,2400-i*155)),
+        segment:['Cart Abandoner','Comparison Shopper','Window Shopper','Repeat Visitor'][i%4]
+      }))
+    },
+    failure_points:{
+      failure_cards:[
+        {reason:'Price Sensitivity',       description:'Users repeatedly viewing high-priced items without converting',affected:12341,severity:'HIGH',    icon:'💰',action:'Send targeted discount or instalment-plan offer'},
+        {reason:'Cart Abandonment',        description:'Users who added items to cart but never purchased',           affected:6891, severity:'CRITICAL',icon:'🛒',action:'Trigger abandoned-cart email within 1 hour'},
+        {reason:'Comparison Friction',     description:'Users browsing ≥3 products in same category without deciding',affected:4823, severity:'MEDIUM',  icon:'🔄',action:'Show side-by-side comparison widget with top choice'},
+        {reason:'UX / Navigation Friction',description:'Sessions with ≤2 events and zero purchases (bounce)',         affected:18234,severity:'MEDIUM',  icon:'⚠️',action:'A/B test landing page layout and search quality'},
+      ],
+      abandonment_by_cat:[
+        {category_main:'electronics', total_carts:11234,abandoned_carts:8234,avg_price:233.6,abandonment_rate:73.3,revenue_at_risk:1923481},
+        {category_main:'computers',   total_carts:7234, abandoned_carts:5123,avg_price:234.9,abandonment_rate:70.8,revenue_at_risk:1203491},
+        {category_main:'appliances',  total_carts:5234, abandoned_carts:3421,avg_price:260.5,abandonment_rate:65.4,revenue_at_risk:891234},
+        {category_main:'furniture',   total_carts:2941, abandoned_carts:2134,avg_price:250.6,abandonment_rate:72.6,revenue_at_risk:534821},
+        {category_main:'sport',       total_carts:3091, abandoned_carts:1823,avg_price:128.8,abandonment_rate:59.0,revenue_at_risk:234891},
+        {category_main:'kids',        total_carts:2273, abandoned_carts:1234,avg_price:153.3,abandonment_rate:54.3,revenue_at_risk:189234},
+        {category_main:'apparel',     total_carts:1973, abandoned_carts:983, avg_price:99.9, abandonment_rate:49.8,revenue_at_risk:98234},
+        {category_main:'auto',        total_carts:1180, abandoned_carts:723, avg_price:120.7,abandonment_rate:61.3,revenue_at_risk:87234},
+      ],
+      price_sensitivity:[
+        {price_tier:'< $10',   views:23412, purchases:3241,conv_rate:13.84},
+        {price_tier:'$10–50',  views:98234, purchases:8234,conv_rate:8.38},
+        {price_tier:'$50–100', views:123412,purchases:5823,conv_rate:4.72},
+        {price_tier:'$100–500',views:134234,purchases:1923,conv_rate:1.43},
+        {price_tier:'> $500',  views:18942, purchases:242, conv_rate:1.28},
+      ]
+    },
+    alerts:Array.from({length:12},(_,i)=>{
+      const val=Math.round(Math.max(20,2100-i*158+(Math.random()-.5)*80)*100)/100;
+      const level=val>500?'CRITICAL':val>200?'HIGH':'MEDIUM';
+      const cats=['electronics','computers','appliances','furniture','sport'];
+      const brands=['samsung','apple','xiaomi','lenovo','sony'];
+      const recs={CRITICAL:`Flash 10% off — saves ≈$${(val*.1).toFixed(0)}. Push + email NOW.`,HIGH:'Retargeting email with 5-star reviews.',MEDIUM:'Show free-shipping threshold or similar-product nudge.'};
+      return {
+        user_id:(0x100000+i*7919).toString(16),
+        session_id:(Date.now()+i).toString(36).slice(-12)+'…',
+        cart_value:val,event_count:Math.round(8+i*1.5),intent_level:level,
+        category:cats[i%cats.length],brand:brands[i%brands.length],
+        recommendation:recs[level],
+        last_activity:`2019-10-31 ${String(Math.floor(i*1.8+8)).padStart(2,'0')}:${String(Math.round(i*5)%60).padStart(2,'0')}`
+      };
+    }),
+    categories:[
+      {category_main:'electronics', views:134234,carts:18234,purchases:6234,revenue:1452891,users:28234,cart_rate:13.6,conv_rate:4.6,cart_conv:34.2,avg_revenue:233.1},
+      {category_main:'computers',   views:98234, carts:12341,purchases:4123,revenue:968234, users:19234,cart_rate:12.6,conv_rate:4.2,cart_conv:33.4,avg_revenue:234.8},
+      {category_main:'appliances',  views:72341, carts:9823, purchases:3241,revenue:847234, users:15234,cart_rate:13.6,conv_rate:4.5,cart_conv:33.0,avg_revenue:261.4},
+      {category_main:'furniture',   views:34234, carts:4123, purchases:1234,revenue:312341, users:8234, cart_rate:12.0,conv_rate:3.6,cart_conv:29.9,avg_revenue:253.1},
+      {category_main:'sport',       views:28234, carts:3423, purchases:1423,revenue:183412, users:6823, cart_rate:12.1,conv_rate:5.0,cart_conv:41.6,avg_revenue:128.9},
+      {category_main:'kids',        views:19234, carts:2341, purchases:1023,revenue:156834, users:4823, cart_rate:12.2,conv_rate:5.3,cart_conv:43.7,avg_revenue:153.3},
+      {category_main:'apparel',     views:14234, carts:1823, purchases:841, revenue:84012,  users:3823, cart_rate:12.8,conv_rate:5.9,cart_conv:46.1,avg_revenue:99.9},
+      {category_main:'auto',        views:8234,  carts:982,  purchases:259, revenue:31293,  users:2234, cart_rate:11.9,conv_rate:3.1,cart_conv:26.4,avg_revenue:120.8},
+      {category_main:'construction',views:6234,  carts:712,  purchases:177, revenue:22716,  users:1823, cart_rate:11.4,conv_rate:2.8,cart_conv:24.9,avg_revenue:128.3},
+      {category_main:'stationery',  views:3358,  carts:389,  purchases:116, revenue:9604,   users:912,  cart_rate:11.6,conv_rate:3.5,cart_conv:29.8,avg_revenue:82.8},
+    ]
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Core utilities
+// ─────────────────────────────────────────────────────────────────────────────
+const $  = id => document.getElementById(id);
+const fmtN = n => Number(n||0).toLocaleString('en');
+const fmt$ = n => '$' + Number(n||0).toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2});
+const fmtP = n => Number(n||0).toFixed(1)+'%';
+const PALETTE=['#4f8ef7','#58d68d','#f39c12','#e74c3c','#9b59b6','#1abc9c','#3498db','#2ecc71','#e67e22','#e91e63','#00bcd4','#ff9800'];
+const C={blue:'#4f8ef7',green:'#58d68d',orange:'#f39c12',red:'#e74c3c',purple:'#9b59b6',teal:'#1abc9c',muted:'#8b949e',border:'#30363d'};
+
+Chart.defaults.color=C.muted; Chart.defaults.borderColor=C.border;
+Chart.defaults.font.family="'Segoe UI',system-ui,sans-serif"; Chart.defaults.font.size=12;
+
+let DATA=null;
+const charts={};
+
+function mkChart(id,cfg){
+  if(charts[id]){charts[id].destroy();}
+  const ctx=$(id); if(!ctx)return null;
+  return charts[id]=new Chart(ctx,cfg);
+}
+
+function sevBadge(s){
+  const m={CRITICAL:'badge-critical',HIGH:'badge-high',MEDIUM:'badge-medium',LOW:'badge-low'};
+  return `<span class="badge ${m[s]||'badge-low'}">${s}</span>`;
+}
+
+function kpiCard({cls,icon,label,val,sub}){
+  return `<div class="kpi-card ${cls}">
+    <div class="kpi-label">${label}</div>
+    <div class="kpi-value">${val}</div>
+    <div class="kpi-sub">${sub}</div>
+    <i class="fas ${icon} kpi-icon"></i>
+  </div>`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Navigation
+// ─────────────────────────────────────────────────────────────────────────────
+const PAGE_META={
+  overview:   {title:'Overview Dashboard',       sub:'High-level KPIs and trends'},
+  funnel:     {title:'Intent Loss Funnel',        sub:'Where intent breaks down'},
+  leakage:    {title:'Revenue Leakage Analysis',  sub:'Quantified lost revenue'},
+  highintent: {title:'High-Intent Users',         sub:'Your best retargeting audience'},
+  failures:   {title:'Failure Point Diagnosis',   sub:'Why intent fails'},
+  categories: {title:'Category Analysis',         sub:'Product category deep-dive'},
+  alerts:     {title:'Live Intent Alerts',        sub:'Sessions at risk right now'},
+  reports:    {title:'Reports & Summary',         sub:'Full project documentation'},
+};
+
+document.querySelectorAll('.nav-item').forEach(el=>{
+  el.addEventListener('click',()=>{
+    document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+    el.classList.add('active');
+    const page=el.dataset.page;
+    document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+    $('page-'+page).classList.add('active');
+    const m=PAGE_META[page]||{};
+    $('topbar-title').textContent=m.title||page;
+    $('topbar-sub').textContent=m.sub||'';
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Tab switching  — fixed: receives button element explicitly
+// ─────────────────────────────────────────────────────────────────────────────
+function switchTab(group, id, btn){
+  // hide all panes for this group
+  document.querySelectorAll('[id^="'+group+'-pane-"]').forEach(el=>el.classList.remove('active'));
+  const pane=$(group+'-pane-'+id);
+  if(pane) pane.classList.add('active');
+  // deactivate all tab buttons in the same tab-bar
+  if(btn){
+    const bar=btn.closest('.tab-bar');
+    if(bar) bar.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Data loading — tries Flask API, falls back to demo data
+// ─────────────────────────────────────────────────────────────────────────────
+async function loadAll(){
+  $('load-sub').textContent='Connecting to CIGA server…';
+  let usingDemo=false;
+  try{
+    const ctrl=new AbortController();
+    const timer=setTimeout(()=>ctrl.abort(),6000); // 6s timeout
+    const r=await fetch('/api/all',{signal:ctrl.signal});
+    clearTimeout(timer);
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    DATA=await r.json();
+    $('status-text').textContent=fmtN(DATA.overview.kpis.total_events)+' events · Live';
+    $('status-dot').classList.remove('demo');
+  }catch(e){
+    console.warn('API unavailable — loading demo data:',e.message);
+    DATA=generateDemoData();
+    usingDemo=true;
+    $('status-text').textContent='Demo Mode';
+    $('status-dot').classList.add('demo');
+  }
+  $('loading-overlay').style.display='none';
+  if(usingDemo) $('demo-banner').style.display='flex';
+  renderAll();
+}
+
+async function reloadData(){
+  $('loading-overlay').style.display='flex';
+  $('load-sub').textContent='Reloading…';
+  try{ await fetch('/api/reload',{method:'POST',signal:AbortSignal.timeout(3000)}); }catch(e){}
+  await loadAll();
+}
+
+async function reloadAlerts(){
+  try{
+    const r=await fetch('/api/alerts',{signal:AbortSignal.timeout(4000)});
+    if(r.ok) renderAlerts(await r.json());
+  }catch(e){ renderAlerts(DATA.alerts); }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Master render
+// ─────────────────────────────────────────────────────────────────────────────
+function renderAll(){
+  renderOverview(DATA.overview);
+  renderFunnel(DATA.funnel);
+  renderLeakage(DATA.revenue_leakage);
+  renderHighIntent(DATA.high_intent);
+  renderFailures(DATA.failure_points);
+  renderCategories(DATA.categories);
+  renderAlerts(DATA.alerts);
+  renderReports();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  1. Overview
+// ─────────────────────────────────────────────────────────────────────────────
+function renderOverview(ov){
+  const k=ov.kpis;
+  $('kpi-row1').innerHTML=[
+    {cls:'blue',  icon:'fa-database',      label:'Total Events',    val:fmtN(k.total_events),       sub:fmtN(k.total_users)+' unique users'},
+    {cls:'teal',  icon:'fa-route',         label:'Sessions',        val:fmtN(k.total_sessions),     sub:fmtN(k.total_products)+' products'},
+    {cls:'green', icon:'fa-eye',           label:'Total Views',     val:fmtN(k.views),              sub:'Product page views'},
+    {cls:'orange',icon:'fa-shopping-cart', label:'Cart Adds',       val:fmtN(k.cart_adds),          sub:'View→Cart: '+fmtP(k.view_to_cart_rate)},
+    {cls:'purple',icon:'fa-check-circle',  label:'Purchases',       val:fmtN(k.purchases),          sub:'Cart→Buy: '+fmtP(k.cart_to_buy_rate)},
+    {cls:'blue',  icon:'fa-percentage',    label:'Conversion Rate', val:fmtP(k.overall_conversion), sub:'Views → Purchase'},
+  ].map(kpiCard).join('');
+  $('kpi-row2').innerHTML=[
+    {cls:'green', icon:'fa-dollar-sign',  label:'Revenue Earned',     val:fmt$(k.total_revenue),      sub:'Completed purchases'},
+    {cls:'red',   icon:'fa-water',        label:'Revenue Leaked',      val:fmt$(k.revenue_leaked),     sub:'Cart abandonment loss'},
+    {cls:'orange',icon:'fa-seedling',     label:'Recovery Potential',  val:fmt$(k.recovery_potential), sub:'Est. 28% recoverable'},
+    {cls:'purple',icon:'fa-bolt',         label:'High-Intent Users',   val:fmtN(k.high_intent_users),  sub:'Intent score ≥ 40'},
+    {cls:'red',   icon:'fa-user-times',   label:'Lost High-Intent',    val:fmtN(k.high_intent_no_buy), sub:'Intent≥40, no purchase'},
+  ].map(kpiCard).join('');
+
+  const dt=ov.daily_trend;
+  mkChart('chart-daily',{type:'line',data:{labels:dt.dates,datasets:[
+    {label:'Views',    data:dt.views,     borderColor:C.blue,  backgroundColor:'rgba(79,142,247,.08)',tension:.4,fill:true},
+    {label:'Carts',    data:dt.carts,     borderColor:C.orange,backgroundColor:'rgba(243,156,18,.08)',tension:.4,fill:true},
+    {label:'Purchases',data:dt.purchases, borderColor:C.green, backgroundColor:'rgba(88,214,141,.08)',tension:.4,fill:true},
+  ]},options:{responsive:true,interaction:{mode:'index',intersect:false},
+    plugins:{legend:{position:'top'}},scales:{x:{ticks:{maxTicksLimit:10}}}}});
+
+  const hp=ov.hourly_pattern;
+  mkChart('chart-hourly',{type:'bar',data:{labels:hp.hours.map(h=>h+':00'),datasets:[
+    {label:'Views',    data:hp.views,    backgroundColor:C.blue+'66',borderColor:C.blue,  borderWidth:1},
+    {label:'Purchases',data:hp.purchases,backgroundColor:C.green+'99',borderColor:C.green,borderWidth:1},
+  ]},options:{responsive:true,plugins:{legend:{position:'top'}}}});
+
+  mkChart('chart-events-doughnut',{type:'doughnut',data:{
+    labels:['Views','Cart Adds','Purchases','Removed'],
+    datasets:[{data:[k.views,k.cart_adds,k.purchases,Math.max(0,k.cart_adds-k.purchases)],
+               backgroundColor:[C.blue,C.orange,C.green,C.red],borderWidth:0,hoverOffset:8}]
+  },options:{responsive:true,cutout:'65%',plugins:{legend:{position:'right'}}}});
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  2. Intent Funnel
+// ─────────────────────────────────────────────────────────────────────────────
+function funnelBars(data){
+  const max=data.values[0]||1;
+  const COLORS=[C.blue,C.orange,C.green];
+  return data.stages.map((stage,i)=>{
+    const pct=Math.round(data.values[i]/max*100);
+    const drop=data.drops[i];
+    return `<div class="funnel-stage">
+      <div class="funnel-label">${stage}</div>
+      <div class="funnel-bar-wrap"><div class="funnel-bar" style="width:${pct}%;background:${COLORS[i]||C.blue}">${fmtN(data.values[i])}</div></div>
+      <div class="funnel-drop">${drop>0?'▼ '+fmtP(drop):'—'}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderFunnel(fn){
+  const sf=fn.standard, wf=fn.intent_weighted;
+  mkChart('chart-funnel-std',{type:'bar',data:{labels:sf.stages,datasets:[{label:'Count',data:sf.values,backgroundColor:[C.blue,C.orange,C.green],borderRadius:8,borderWidth:0}]},options:{indexAxis:'y',responsive:true,plugins:{legend:{display:false}},scales:{x:{beginAtZero:true}}}});
+  $('funnel-bars-std').innerHTML=funnelBars(sf);
+  mkChart('chart-funnel-intent',{type:'bar',data:{labels:wf.stages,datasets:[{label:'Users',data:wf.values,backgroundColor:[C.purple,C.orange,C.green],borderRadius:8,borderWidth:0}]},options:{indexAxis:'y',responsive:true,plugins:{legend:{display:false}},scales:{x:{beginAtZero:true}}}});
+  $('funnel-bars-intent').innerHTML=funnelBars(wf);
+
+  const g=fn.intent_gap;
+  $('gap-summary').innerHTML=`
+    <div class="kpi-grid" style="margin-bottom:18px">
+      ${kpiCard({cls:'red',  icon:'fa-user-times',label:'Non-Converting High-Intent',val:fmtN(g.non_converting_high_intent),sub:'Users who showed intent but did not buy'})}
+      ${kpiCard({cls:'orange',icon:'fa-percentage',label:'Intent Gap %',              val:fmtP(g.gap_pct),                    sub:'% of high-intent users lost'})}
+    </div>
+    <div class="info-box"><strong>Interpretation:</strong> ${fmtP(g.gap_pct)} of high-intent users never converted. These ${fmtN(g.non_converting_high_intent)} users already want to buy — they are your highest-ROI retargeting audience.</div>`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  3. Revenue Leakage
+// ─────────────────────────────────────────────────────────────────────────────
+function renderLeakage(rl){
+  const s=rl.summary;
+  $('leakage-kpis').innerHTML=[
+    {cls:'green', icon:'fa-dollar-sign',label:'Revenue Earned',    val:fmt$(s.total_revenue),  sub:'Completed purchases'},
+    {cls:'red',   icon:'fa-water',      label:'Revenue Leaked',    val:fmt$(s.total_leaked),   sub:fmtP(s.leakage_rate_pct)+' of total GMV'},
+    {cls:'orange',icon:'fa-seedling',   label:'Recoverable (28%)', val:fmt$(s.recoverable),    sub:'Achievable with interventions'},
+  ].map(kpiCard).join('');
+
+  const cats=rl.by_category;
+  mkChart('chart-leak-cat',{type:'bar',data:{labels:cats.map(c=>c.category_main),datasets:[{label:'Revenue Leaked ($)',data:cats.map(c=>+(c.revenue_leaked).toFixed(2)),backgroundColor:PALETTE,borderRadius:6,borderWidth:0}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{x:{ticks:{maxRotation:35}}}}});
+  mkChart('chart-aband-cat',{type:'bar',data:{labels:cats.map(c=>c.category_main),datasets:[{label:'Abandonment %',data:cats.map(c=>+(c.abandonment_rate||0).toFixed(1)),backgroundColor:C.red+'99',borderRadius:6,borderWidth:0}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{max:100},x:{ticks:{maxRotation:35}}}}});
+
+  const brands=rl.by_brand;
+  mkChart('chart-leak-brand',{type:'bar',data:{labels:brands.map(b=>b.brand),datasets:[{label:'Revenue Leaked ($)',data:brands.map(b=>+(b.revenue_leaked).toFixed(2)),backgroundColor:PALETTE,borderRadius:6,borderWidth:0}]},options:{responsive:true,plugins:{legend:{display:false}}}});
+
+  const pt=rl.by_price_tier;
+  mkChart('chart-leak-price',{type:'doughnut',data:{labels:pt.map(p=>p.price_tier),datasets:[{data:pt.map(p=>p.abandoned_count),backgroundColor:PALETTE,borderWidth:0,hoverOffset:8}]},options:{responsive:true,cutout:'55%',plugins:{legend:{position:'right'}}}});
+  mkChart('chart-leak-price2',{type:'bar',data:{labels:pt.map(p=>p.price_tier),datasets:[{label:'Revenue at Risk ($)',data:pt.map(p=>+(p.revenue_leaked).toFixed(2)),backgroundColor:PALETTE,borderRadius:6,borderWidth:0}]},options:{responsive:true,plugins:{legend:{display:false}}}});
+
+  const dt=rl.daily_trend;
+  mkChart('chart-leak-daily',{type:'line',data:{labels:dt.map(d=>d.date),datasets:[{label:'Revenue Leaked ($)',data:dt.map(d=>+(d.revenue_leaked).toFixed(2)),borderColor:C.red,backgroundColor:'rgba(231,76,60,.1)',tension:.4,fill:true}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{x:{ticks:{maxTicksLimit:10}}}}});
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  4. High-Intent Users
+// ─────────────────────────────────────────────────────────────────────────────
+function renderHighIntent(hi){
+  const s=hi.summary;
+  $('hi-kpis').innerHTML=[
+    {cls:'red',   icon:'fa-user-slash', label:'High-Intent Non-Buyers',val:fmtN(s.total_high_intent_no_buy),sub:'Intent score ≥40, zero purchases'},
+    {cls:'orange',icon:'fa-bullseye',   label:'Avg Intent Score',      val:(s.avg_intent_score||0)+'/100',  sub:'Normalised 0–100 scale'},
+    {cls:'green', icon:'fa-dollar-sign',label:'Revenue at Risk',       val:fmt$(s.potential_revenue),       sub:'Total cart value, no purchase'},
+    {cls:'teal',  icon:'fa-seedling',   label:'Recoverable Revenue',   val:fmt$(s.recoverable_revenue),     sub:'28% recovery estimate'},
+  ].map(kpiCard).join('');
+
+  const segs=Object.entries(hi.segments);
+  mkChart('chart-segments',{type:'doughnut',data:{labels:segs.map(s=>s[0]),datasets:[{data:segs.map(s=>s[1]),backgroundColor:PALETTE,borderWidth:0,hoverOffset:8}]},options:{responsive:true,cutout:'55%',plugins:{legend:{position:'right'}}}});
+
+  const sd=hi.score_distribution;
+  mkChart('chart-score-dist',{type:'bar',data:{labels:sd.labels,datasets:[{label:'Users',data:sd.values,backgroundColor:sd.values.map((_,i)=>PALETTE[i%PALETTE.length]),borderRadius:6,borderWidth:0}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{x:{ticks:{maxRotation:45}}}}});
+
+  $('badge-hi').textContent=fmtN(s.total_high_intent_no_buy);
+  $('table-hi-users').innerHTML=hi.top_users.map((u,i)=>{
+    const sc=+u.intent_score;
+    const col=sc>=70?C.red:sc>=50?C.orange:C.blue;
+    return `<tr>
+      <td style="color:var(--muted)">${i+1}</td>
+      <td style="font-family:monospace;font-size:11px">…${String(u.user_id).slice(-10)}</td>
+      <td><span style="color:${col};font-weight:700">${sc}</span>/100</td>
+      <td>${fmtN(u.total_views)}</td>
+      <td>${fmtN(u.cart_adds)}</td>
+      <td>${fmtN(u.sessions)}</td>
+      <td style="color:var(--accent2)">${fmt$(u.total_cart_value)}</td>
+      <td><span class="badge badge-seg">${u.segment}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  5. Failure Points
+// ─────────────────────────────────────────────────────────────────────────────
+function renderFailures(fp){
+  $('failure-cards').innerHTML=fp.failure_cards.map(c=>`
+    <div class="failure-card">
+      <div class="failure-icon">${c.icon}</div>
+      <div style="margin-bottom:6px">${sevBadge(c.severity)}</div>
+      <div class="failure-title">${c.reason}</div>
+      <div class="failure-desc">${c.description}</div>
+      <div style="font-size:10px;color:var(--muted)">Users Affected</div>
+      <div class="failure-affected">${fmtN(c.affected)}</div>
+      <div class="failure-action"><strong>Action:</strong> ${c.action}</div>
+    </div>`).join('');
+
+  const ac=fp.abandonment_by_cat;
+  mkChart('chart-aband-rate',{type:'bar',data:{labels:ac.map(c=>c.category_main),datasets:[{label:'Abandonment %',data:ac.map(c=>+(c.abandonment_rate||0).toFixed(1)),backgroundColor:C.red+'99',borderRadius:6,borderWidth:0}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{max:100},x:{ticks:{maxRotation:35}}}}});
+
+  const pc=fp.price_sensitivity;
+  mkChart('chart-price-conv',{type:'bar',data:{labels:pc.map(p=>p.price_tier),datasets:[{label:'Conversion %',data:pc.map(p=>+(p.conv_rate||0).toFixed(2)),backgroundColor:PALETTE,borderRadius:6,borderWidth:0}]},options:{responsive:true,plugins:{legend:{display:false}}}});
+
+  mkChart('chart-risk-cat',{type:'bar',data:{labels:ac.map(c=>c.category_main),datasets:[{label:'Revenue at Risk ($)',data:ac.map(c=>+(c.revenue_at_risk||0).toFixed(2)),backgroundColor:PALETTE,borderRadius:6,borderWidth:0}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{x:{ticks:{maxRotation:35}}}}});
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  6. Categories
+// ─────────────────────────────────────────────────────────────────────────────
+function renderCategories(cats){
+  mkChart('chart-cat-bar',{type:'bar',data:{labels:cats.map(c=>c.category_main),datasets:[
+    {label:'Views',    data:cats.map(c=>c.views),    backgroundColor:C.blue+'99', borderRadius:4,borderWidth:0},
+    {label:'Purchases',data:cats.map(c=>c.purchases),backgroundColor:C.green+'99',borderRadius:4,borderWidth:0},
+  ]},options:{responsive:true,plugins:{legend:{position:'top'}},scales:{x:{ticks:{maxRotation:35}}}}});
+
+  mkChart('chart-cat-conv',{type:'radar',data:{labels:cats.slice(0,8).map(c=>c.category_main),datasets:[{label:'Conversion Rate (%)',data:cats.slice(0,8).map(c=>+(c.conv_rate||0).toFixed(2)),backgroundColor:'rgba(79,142,247,.2)',borderColor:C.blue,pointRadius:4}]},options:{responsive:true,plugins:{legend:{display:false}}}});
+
+  mkChart('chart-cat-rev',{type:'doughnut',data:{labels:cats.map(c=>c.category_main),datasets:[{data:cats.map(c=>c.revenue||0),backgroundColor:PALETTE,borderWidth:0,hoverOffset:8}]},options:{responsive:true,cutout:'50%',plugins:{legend:{position:'right'}}}});
+
+  const mx=Math.max(...cats.map(c=>c.views),1);
+  $('table-cats').innerHTML=cats.map(c=>`<tr>
+    <td style="font-weight:600"><span class="mini-bar" style="width:${Math.round(c.views/mx*60)}px"></span>${c.category_main}</td>
+    <td>${fmtN(c.views)}</td>
+    <td>${fmtP(c.cart_rate)}</td>
+    <td style="color:${c.conv_rate<1?C.red:c.conv_rate<3?C.orange:C.green}">${fmtP(c.conv_rate)}</td>
+    <td>${fmtP(c.cart_conv)}</td>
+    <td style="color:var(--accent2)">${fmt$(c.revenue)}</td>
+    <td>${fmtN(c.users)}</td>
+  </tr>`).join('');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  7. Alerts
+// ─────────────────────────────────────────────────────────────────────────────
+function renderAlerts(alerts){
+  $('badge-alert').textContent=alerts.length;
+  const crit=alerts.filter(a=>a.intent_level==='CRITICAL').length;
+  const tot=alerts.reduce((s,a)=>s+(+a.cart_value||0),0);
+  $('alert-kpis').innerHTML=[
+    {cls:'red',   icon:'fa-exclamation-circle',label:'At-Risk Sessions', val:fmtN(alerts.length),sub:'Cart added, not purchased'},
+    {cls:'orange',icon:'fa-skull-crossbones',  label:'Critical Intent',  val:fmtN(crit),         sub:'Cart value > $500'},
+    {cls:'green', icon:'fa-dollar-sign',       label:'Total Cart Value', val:fmt$(tot),           sub:'Recoverable with intervention'},
+  ].map(kpiCard).join('');
+
+  $('alert-cards').innerHTML=alerts.length
+    ? alerts.map(a=>`
+      <div class="alert-card ${a.intent_level}">
+        <div class="alert-top">
+          <div>
+            <div style="font-size:11px;color:var(--muted)">Session</div>
+            <div style="font-size:12px;font-weight:700;font-family:monospace">${a.session_id}</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:3px">User …${a.user_id} · ${a.category} · ${a.brand}</div>
+          </div>
+          <div style="text-align:right">
+            <div style="margin-bottom:4px">${sevBadge(a.intent_level)}</div>
+            <div class="alert-value">${fmt$(a.cart_value)}</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:14px;font-size:11px;color:var(--muted)">
+          <span><i class="fas fa-mouse-pointer"></i> ${a.event_count} events</span>
+          <span><i class="fas fa-clock"></i> ${a.last_activity}</span>
+        </div>
+        <div class="alert-rec"><strong>Recommended:</strong> ${a.recommendation}</div>
+      </div>`).join('')
+    : '<div style="color:var(--muted);text-align:center;padding:40px">No active alerts</div>';
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  8. Reports
+// ─────────────────────────────────────────────────────────────────────────────
+function renderReports(){
+  const k=DATA.overview.kpis, s=DATA.revenue_leakage.summary;
+  $('report-summary').innerHTML=`
+    <strong style="color:var(--text)">Dataset:</strong> ${fmtN(k.total_events)} events · ${fmtN(k.total_users)} users · ${fmtN(k.total_sessions)} sessions<br>
+    <strong style="color:var(--text)">Conversion:</strong> Overall ${fmtP(k.overall_conversion)} · View→Cart ${fmtP(k.view_to_cart_rate)} · Cart→Buy ${fmtP(k.cart_to_buy_rate)}<br>
+    <strong style="color:var(--text)">Revenue:</strong> Earned ${fmt$(k.total_revenue)} · Leaked ${fmt$(k.revenue_leaked)} · Leakage ${fmtP(s.leakage_rate_pct)}<br>
+    <strong style="color:var(--text)">Intent:</strong> ${fmtN(k.high_intent_users)} high-intent users · ${fmtN(k.high_intent_no_buy)} non-converting · Recovery potential ${fmt$(k.recovery_potential)}<br>
+    <strong style="color:var(--text)">Top Failure:</strong> Cart Abandonment — ${fmtN(DATA.failure_points.failure_cards.find(f=>f.reason==='Cart Abandonment')?.affected||0)} users
+  `;
+}
+
+// ── Boot ─────────────────────────────────────────────────────────────────────
+loadAll();
+</script>
+</body>
+</html>
